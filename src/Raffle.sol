@@ -31,21 +31,32 @@ import {VRFConsumerBaseV2} from "@chainlink/contracts/src/v0.8/VRFConsumerBaseV2
  */
 contract Raffle is VRFConsumerBaseV2 {
     error Raffle_NotEnoughEtherSent();
+    error Raffle_Transferailed();
+    error Raffle_NotOpen();
+
+    enum RaffleState {
+        OPEN,
+        CALCULATING
+    }
 
     uint16 private constant REQUE_STCONFIRMATIONS = 3;
     uint32 private constant NUM_WORDS = 1;
 
     uint256 private immutable i_entranceFee;
     uint256 private immutable i_interval;
-    uint256 private immutable s_lastTimeStamp;
+    uint256 private s_lastTimeStamp;
     VRFCoordinatorV2Interface private immutable i_vrfCoordinator;
     bytes32 private immutable i_gasLine;
     uint64 private immutable i_subscriptionId;
     uint32 private immutable i_callbackGasLimit;
 
     address payable[] s_player;
+    address private s_lastestWinner;
+
+    RaffleState private s_raffleState;
 
     event EnteredRaffle(address indexed player);
+    event PickedWinner(address indexed winner);
 
     constructor(
         uint256 entranceFee,
@@ -62,12 +73,16 @@ contract Raffle is VRFConsumerBaseV2 {
         i_subscriptionId = subscriptionId;
         i_callbackGasLimit = callbackGasLimit;
 
+        s_raffleState = RaffleState.OPEN;
         s_lastTimeStamp = block.timestamp;
     }
 
     function enterRaffle() external payable {
         if (msg.value < i_entranceFee) {
             revert Raffle_NotEnoughEtherSent();
+        }
+        if (s_raffleState != RaffleState.OPEN) {
+            revert Raffle_NotOpen();
         }
         s_player.push(payable(msg.sender));
         emit EnteredRaffle(msg.sender);
@@ -79,6 +94,7 @@ contract Raffle is VRFConsumerBaseV2 {
         }
         //request the RNG
         // Will revert if subscription is not set and funded.
+        s_raffleState = RaffleState.CALCULATING;
         uint256 requestId = i_vrfCoordinator.requestRandomWords(
             i_gasLine,
             i_subscriptionId,
@@ -92,7 +108,19 @@ contract Raffle is VRFConsumerBaseV2 {
     function fulfillRandomWords(
         uint256 requestId,
         uint256[] memory randomWords
-    ) internal override {}
+    ) internal override {
+        uint256 indexOfWinner = randomWords[0] % 10;
+        address payable winner = s_player[indexOfWinner];
+        s_lastestWinner = winner;
+        s_player = new address payable[](0);
+        s_lastTimeStamp = block.timestamp;
+        emit PickedWinner(winner);
+        (bool success, ) = winner.call{value: address(this).balance}("");
+        s_raffleState = RaffleState.OPEN;
+        if (!success) {
+            revert Raffle_Transferailed();
+        }
+    }
 
     function getEntranceFee() external view returns (uint256) {
         return i_entranceFee;
