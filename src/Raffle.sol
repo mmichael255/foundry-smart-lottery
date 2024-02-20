@@ -62,6 +62,7 @@ contract Raffle is VRFConsumerBaseV2 {
 
     event EnteredRaffle(address indexed player);
     event PickedWinner(address indexed winner);
+    event RequestedRaffleWinner(uint256 indexed requestId);
 
     constructor(
         uint256 entranceFee,
@@ -95,7 +96,7 @@ contract Raffle is VRFConsumerBaseV2 {
 
     function checkUpkeep(
         bytes memory /*checkData*/
-    ) public returns (bool upkeepNeeded, bytes memory /*performData*/) {
+    ) public view returns (bool upkeepNeeded, bytes memory /*performData*/) {
         bool timeHasPassed = (block.timestamp - s_lastTimeStamp) >= i_interval;
         bool isOpen = RaffleState.OPEN == s_raffleState;
         bool isBalance = address(this).balance > 0;
@@ -119,22 +120,21 @@ contract Raffle is VRFConsumerBaseV2 {
         //request the RNG
         // Will revert if subscription is not set and funded.
         s_raffleState = RaffleState.CALCULATING;
-        /*uint256 requestId = */
-        i_vrfCoordinator.requestRandomWords(
+        uint256 requestId = i_vrfCoordinator.requestRandomWords(
             i_gasLine,
             i_subscriptionId,
             REQUE_STCONFIRMATIONS,
             i_callbackGasLimit,
             NUM_WORDS
         );
-        //get the random nuber
+        emit RequestedRaffleWinner(requestId);
     }
 
     function fulfillRandomWords(
         uint256 /*requestId*/,
         uint256[] memory randomWords
     ) internal override {
-        uint256 indexOfWinner = randomWords[0] % 10;
+        uint256 indexOfWinner = randomWords[0] % 5;
         address payable winner = s_player[indexOfWinner];
         s_lastestWinner = winner;
         s_player = new address payable[](0);
@@ -149,5 +149,25 @@ contract Raffle is VRFConsumerBaseV2 {
 
     function getEntranceFee() external view returns (uint256) {
         return i_entranceFee;
+    }
+
+    function getRaffleState() external view returns (RaffleState) {
+        return s_raffleState;
+    }
+
+    function getPlayers(uint256 indexOfPlayer) external view returns (address) {
+        return s_player[indexOfPlayer];
+    }
+
+    function getLastestWinner() external view returns (address) {
+        return s_lastestWinner;
+    }
+
+    function getLengthPlayers() external view returns (uint256) {
+        return s_player.length;
+    }
+
+    function getLastTimeStamp() external view returns (uint256) {
+        return s_lastTimeStamp;
     }
 }
