@@ -134,7 +134,7 @@ contract Raffle is VRFConsumerBaseV2 {
         uint256 /*requestId*/,
         uint256[] memory randomWords
     ) internal override {
-        uint256 indexOfWinner = randomWords[0] % 5;
+        uint256 indexOfWinner = randomWords[0] % 10;
         address payable winner = s_player[indexOfWinner];
         s_lastestWinner = winner;
         s_player = new address payable[](0);
